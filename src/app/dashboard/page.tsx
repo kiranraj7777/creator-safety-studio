@@ -6,6 +6,12 @@ import { SafetyScoreChart } from "@/components/dashboard/safety-chart";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+interface DailyStat {
+  createdAt: Date;
+  _count: { id: number };
+  _avg: { toxicScore: number | null };
+}
+
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as any)?.id || "";
@@ -17,6 +23,8 @@ export default async function DashboardPage() {
     stats.totalComments > 0
       ? Math.round(((stats.totalComments - stats.flaggedComments) / stats.totalComments) * 100)
       : 100;
+
+  const chartData: DailyStat[] = stats.dailyStats;
 
   return (
     <div className="space-y-6">
@@ -86,7 +94,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="col-span-2">
           <CardHeader><CardTitle>Safety Trend</CardTitle></CardHeader>
-          <CardContent><SafetyScoreChart data={stats.dailyStats} /></CardContent>
+          <CardContent><SafetyScoreChart data={chartData} /></CardContent>
         </Card>
         <Card className="col-span-1">
           <CardHeader><CardTitle>Recent Flagged Comments</CardTitle></CardHeader>

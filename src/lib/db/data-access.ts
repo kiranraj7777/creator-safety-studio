@@ -47,15 +47,33 @@ export async function getDashboardStats(userId: string) {
     },
   })).map(c => ({ ...c, platform: c.platform as "youtube" | "instagram" | "facebook", riskLabel: c.riskLabel as "low" | "medium" | "high" }));
 
-  const dailyStats = await prisma.comment.groupBy({
-    by: ["createdAt"],
-    where: {
-      connectedPlatformId: { in: platformIds },
-      createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    },
-    _count: { id: true },
-    _avg: { toxicScore: true },
-  });
+  interface DailyStatRow {
+    created_date: Date;
+    comment_count: bigint;
+    avg_toxicity: number | null;
+  }
+
+  const startDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  
+  const rawStats = await prisma.$queryRawUnsafe<DailyStatRow[]>(
+    `SELECT 
+      DATE(created_at AT TIME ZONE 'UTC') as created_date,
+      COUNT(*) as comment_count,
+      AVG(toxic_score)::float8 as avg_toxicity
+    FROM "Comment"
+    WHERE connected_platform_id = ANY($1)
+      AND created_at >= $2
+    GROUP BY DATE(created_at AT TIME ZONE 'UTC')
+    ORDER BY created_date ASC`,
+    platformIds,
+    startDate
+  );
+
+  const dailyStats = rawStats.map(r => ({
+    createdAt: r.created_date,
+    _count: { id: Number(r.comment_count) },
+    _avg: { toxicScore: r.avg_toxicity },
+  }));
 
   const safetyScore =
     totalComments > 0

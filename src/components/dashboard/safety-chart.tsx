@@ -13,15 +13,18 @@ import { format } from "date-fns";
 
 interface DailyStat {
   createdAt: Date;
-  _count: { id: number };
-  _avg: { toxicScore: number | null };
+  _count?: { id: number };
+  _avg?: { toxicScore: number | null };
+  created_date?: Date;
+  comment_count?: number;
+  avg_toxicity?: number | null;
 }
 
 export function SafetyScoreChart({ data }: { data: DailyStat[] }) {
   const chartData = data.map((d) => ({
-    date: format(new Date(d.createdAt), "MMM dd"),
-    comments: d._count.id,
-    avgToxicity: Math.round((d._avg.toxicScore || 0) * 100),
+    date: format(new Date(d.createdAt || d.created_date!), "MMM dd"),
+    comments: d._count?.id || d.comment_count || 0,
+    avgToxicity: Math.round(((d._avg?.toxicScore || d.avg_toxicity) || 0) * 100),
   }));
 
   if (chartData.length === 0) {

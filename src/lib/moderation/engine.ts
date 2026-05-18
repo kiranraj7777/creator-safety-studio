@@ -62,6 +62,7 @@ export async function moderateAsync(
     confidence: Math.round(confidence * 100) / 100,
     reason,
     languageDetected: base.languageDetected,
+    normalizedText: base.normalizedText || "",
   };
 }
 
@@ -121,6 +122,7 @@ export function moderate(
     confidence: Math.round(confidence * 100) / 100,
     reason,
     languageDetected: normalized.languageDetected,
+    normalizedText: normalized.normalized,
   };
 }
 

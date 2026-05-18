@@ -29,11 +29,18 @@ export async function POST() {
 
           const authorHash = hashAuthorHandle(snippet.authorChannelId?.value || snippet.authorDisplayName || "");
           const displayNameEnc = encrypt(snippet.authorDisplayName || "Unknown");
-          const modResult = await moderateAsync(snippet.textDisplay || "");
+          const rawCommentText = snippet.textDisplay || "";
+          const modResult = await moderateAsync(rawCommentText);
 
           await prisma.comment.upsert({
             where: { commentId: item.id },
-            update: { toxicScore: modResult.toxicityScore, riskLabel: modResult.riskLabel, matchedPhrases: JSON.stringify(modResult.matchedPhrases) },
+            update: { 
+              toxicScore: modResult.toxicityScore, 
+              riskLabel: modResult.riskLabel, 
+              matchedPhrases: JSON.stringify(modResult.matchedPhrases),
+              commentTextRaw: rawCommentText,
+              commentTextNormalized: modResult.normalizedText || modResult.languageDetected,
+            },
             create: {
               platform: "youtube",
               connectedPlatformId: account.id,
@@ -42,8 +49,8 @@ export async function POST() {
               commentId: item.id,
               authorDisplayNameEnc: displayNameEnc,
               authorHandleHash: authorHash,
-              commentTextRaw: snippet.textDisplay || "",
-              commentTextNormalized: modResult.languageDetected,
+              commentTextRaw: rawCommentText,
+              commentTextNormalized: modResult.normalizedText || modResult.languageDetected,
               languageDetected: modResult.languageDetected,
               toxicScore: modResult.toxicityScore,
               riskLabel: modResult.riskLabel,

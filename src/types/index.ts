@@ -9,6 +9,7 @@ export interface ModerationResult {
   confidence: number;
   reason: string;
   languageDetected: string;
+  normalizedText?: string;
 }
 
 export interface CommentEvent {
