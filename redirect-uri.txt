@@ -1,0 +1,3 @@
+Paste this into Google Cloud Console:
+
+https://creator-safety-studio.vercel.app/api/auth/callback/google
