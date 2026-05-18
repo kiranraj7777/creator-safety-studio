@@ -4,62 +4,74 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useEffect, useState } from "react";
-import { Save, Trash2, Shield, RefreshCw, Link2, Unlink, Book, Plus, X } from "lucide-react";
+import { Save, Trash2, Shield, RefreshCw, Link2, Unlink, Book, Plus, X, Youtube, Loader2 } from "lucide-react";
 
 interface Platform {
   id: string;
   platform: string;
   accountId: string;
   accountName: string | null;
+  channelHandle: string | null;
   status: string;
   lastSyncAt: string | null;
   createdAt: string;
+  videoCount?: number;
+  syncedVideos?: number;
 }
 
 export default function SettingsPage() {
   const [threshold, setThreshold] = useState([50]);
   const [retentionDays, setRetentionDays] = useState([30]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [channelIdInput, setChannelIdInput] = useState("");
+  const [channelHandle, setChannelHandle] = useState("");
   const [showYoutubeInput, setShowYoutubeInput] = useState(false);
-  const [editingYoutube, setEditingYoutube] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<"json" | "csv">("json");
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   useEffect(() => {
+    fetchPlatforms();
+  }, []);
+
+  function fetchPlatforms() {
     fetch("/api/platforms/connect")
       .then((r) => r.json())
       .then((d) => setPlatforms(d.platforms || []))
       .catch(() => {});
-  }, []);
+  }
 
   const youtubePlatform = platforms.find((p) => p.platform === "youtube");
 
   async function connectYoutube() {
-    if (!channelIdInput.trim()) return;
-    if (youtubePlatform) {
-      await fetch("/api/platforms/disconnect", {
+    if (!channelHandle.trim()) return;
+    setConnecting(true);
+    setConnectError(null);
+    setSyncResult(null);
+
+    try {
+      const res = await fetch("/api/platforms/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platformId: youtubePlatform.id }),
+        body: JSON.stringify({ handle: channelHandle.trim() }),
       });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setConnectError(data.error || "Failed to connect");
+        setConnecting(false);
+        return;
+      }
+
+      setChannelHandle("");
+      setShowYoutubeInput(false);
+      fetchPlatforms();
+      setSyncResult(`Connected ${data.channelName}! Found ${data.videos?.length || 0} videos.`);
+    } catch (err) {
+      setConnectError("Failed to connect channel");
     }
-    await fetch("/api/platforms/connect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        platform: "youtube",
-        accountId: channelIdInput.trim(),
-        accountName: channelIdInput.trim(),
-      }),
-    });
-    setChannelIdInput("");
-    setShowYoutubeInput(false);
-    setEditingYoutube(false);
-    const r = await fetch("/api/platforms/connect");
-    const d = await r.json();
-    setPlatforms(d.platforms || []);
+    setConnecting(false);
   }
 
   async function syncYoutube() {
@@ -68,7 +80,11 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/cron/sync-youtube", { method: "POST" });
       const data = await res.json();
-      setSyncResult(data.commentsSynced !== undefined ? `Synced ${data.commentsSynced} comments` : "Sync completed");
+      if (data.success) {
+        setSyncResult(`Synced ${data.commentsSynced} comments. Found issues in ${data.videosWithBadComments} videos.`);
+      } else {
+        setSyncResult(data.error || "Sync failed");
+      }
     } catch {
       setSyncResult("Sync failed");
     }
@@ -81,9 +97,7 @@ export default function SettingsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ platformId: id }),
     });
-    const r = await fetch("/api/platforms/connect");
-    const d = await r.json();
-    setPlatforms(d.platforms || []);
+    fetchPlatforms();
   }
 
   async function saveSettings() {
@@ -188,59 +202,58 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between rounded-md border p-4">
                 <div>
-                  <p className="font-medium">YouTube</p>
+                  <div className="flex items-center gap-2">
+                    <Youtube className="h-5 w-5 text-red-500" />
+                    <p className="font-medium">YouTube</p>
+                  </div>
                   {youtubePlatform ? (
-                    <>
-                      <p className="text-sm text-green-600">Connected: {youtubePlatform.accountName}</p>
+                    <div className="mt-1 space-y-1">
+                      <p className="text-sm text-green-600 flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Connected: <span className="font-semibold">@{youtubePlatform.channelHandle || youtubePlatform.accountName}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {youtubePlatform.videoCount || 0} videos tracked • {youtubePlatform.syncedVideos || 0} synced
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Last sync: {youtubePlatform.lastSyncAt ? new Date(youtubePlatform.lastSyncAt).toLocaleString() : "Never"}
                       </p>
-                    </>
+                    </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Not connected</p>
+                    <p className="text-sm text-muted-foreground mt-1">Not connected</p>
                   )}
                 </div>
                 <div className="flex gap-2">
                   {youtubePlatform ? (
-                    editingYoutube ? (
+                    <>
+                      <Button variant="outline" size="sm" onClick={syncYoutube} disabled={syncing}>
+                        <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
+                        {syncing ? "Syncing..." : "Sync Comments"}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => disconnectPlatform(youtubePlatform.id)}>
+                        <Unlink className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : showYoutubeInput ? (
+                    <div className="flex flex-col gap-2">
                       <div className="flex gap-2">
-                        <input
-                          className="w-48 rounded-md border px-2 py-1 text-sm"
-                          placeholder="Channel ID (UC...)"
-                          value={channelIdInput}
-                          onChange={(e) => setChannelIdInput(e.target.value)}
-                        />
-                        <Button variant="default" size="sm" onClick={async () => { await connectYoutube(); setEditingYoutube(false); }}>
-                          <Link2 className="h-4 w-4 mr-1" />
-                          Save
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">@</span>
+                          <input
+                            className="w-48 rounded-md border px-2 py-1 pl-7 text-sm"
+                            placeholder="Channel handle"
+                            value={channelHandle}
+                            onChange={(e) => setChannelHandle(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && connectYoutube()}
+                          />
+                        </div>
+                        <Button variant="default" size="sm" onClick={connectYoutube} disabled={connecting}>
+                          {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
                         </Button>
                       </div>
-                    ) : (
-                      <>
-                        <Button variant="outline" size="sm" onClick={() => { setEditingYoutube(true); setChannelIdInput(youtubePlatform.accountId); }}>
-                          Edit
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={syncYoutube} disabled={syncing}>
-                          <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
-                          Sync
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => disconnectPlatform(youtubePlatform.id)}>
-                          <Unlink className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )
-                  ) : showYoutubeInput ? (
-                    <div className="flex gap-2">
-                      <input
-                        className="w-48 rounded-md border px-2 py-1 text-sm"
-                        placeholder="Channel ID (UC...)"
-                        value={channelIdInput}
-                        onChange={(e) => setChannelIdInput(e.target.value)}
-                      />
-                      <Button variant="default" size="sm" onClick={connectYoutube}>
-                        <Link2 className="h-4 w-4 mr-1" />
-                        Save
-                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Enter your YouTube channel handle (e.g., "techbuilder" for youtube.com/@techbuilder)
+                      </p>
                     </div>
                   ) : (
                     <Button variant="outline" size="sm" onClick={() => setShowYoutubeInput(true)}>
@@ -250,13 +263,18 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
+              {connectError && (
+                <p className="text-sm text-destructive text-center">{connectError}</p>
+              )}
               {syncResult && (
-                <p className="text-sm text-muted-foreground text-center">{syncResult}</p>
+                <p className="text-sm text-green-600 text-center">{syncResult}</p>
               )}
               <div className="flex items-center justify-between rounded-md border p-4">
                 <div>
-                  <p className="font-medium">Instagram</p>
-                  <p className="text-sm text-muted-foreground">Not connected</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">Instagram</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Coming soon</p>
                 </div>
                 <Button variant="outline" size="sm" disabled>
                   Connect

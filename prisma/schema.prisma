@@ -61,6 +61,7 @@ model ConnectedPlatform {
   platform     String
   accountId    String
   accountName  String?
+  channelHandle String?
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
@@ -71,14 +72,33 @@ model ConnectedPlatform {
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   comments Comment[]
+  videos   YouTubeVideo[]
 
   @@unique([userId, platform, accountId])
+}
+
+model YouTubeVideo {
+  id                 String   @id @default(cuid())
+  connectedPlatformId String
+  videoId            String   @unique
+  title              String?
+  thumbnailUrl       String?
+  publishedAt        DateTime?
+  fetchedAt          DateTime @default(now())
+  synced             Boolean  @default(false)
+
+  connectedPlatform ConnectedPlatform @relation(fields: [connectedPlatformId], references: [id], onDelete: Cascade)
+  comments          Comment[]
+
+  @@index([connectedPlatformId])
+  @@index([videoId])
 }
 
 model Comment {
   id                    String   @id @default(cuid())
   platform              String
   connectedPlatformId   String?
+  youtubeVideoId        String?
   accountId             String
   videoId               String
   commentId             String   @unique
@@ -100,6 +120,7 @@ model Comment {
   purgedAt              DateTime?
 
   connectedPlatform ConnectedPlatform? @relation(fields: [connectedPlatformId], references: [id], onDelete: Cascade)
+  youtubeVideo     YouTubeVideo?       @relation(fields: [youtubeVideoId], references: [id], onDelete: Cascade)
   terms             CommentTerm[]
 
   @@index([authorHandleHash])
